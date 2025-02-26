@@ -1,11 +1,8 @@
-import { assign, createActor, setup, createMachine } from "xstate";
+import { assign, createActor, setup } from "xstate";
 import { Settings, speechstate } from "speechstate";
 import { createBrowserInspector } from "@statelyai/inspect";
 import { KEY } from "./azure";
 import { DMContext, DMEvents } from "./types";
-import { SpeechStateExternalEvent } from "speechstate";
-import { RecognisedEvent } from "./types";
-
 
 const inspector = createBrowserInspector();
 
@@ -36,17 +33,8 @@ const grammar: { [index: string]: GrammarEntry } = {
   victoria: { person: "Victoria Daniilidou" },
   monday: { day: "Monday" },
   tuesday: { day: "Tuesday" },
-  wednesday: { day: "Wednesday" },
-  thursday: { day: "Thursday" },
-  friday: { day: "Friday" },
-  saturday: { day: "Saturday" },
-  sunday: { day: "Sunday" },
   "10": { time: "10:00" },
   "11": { time: "11:00" },
-  "12": { time: "12:00" },
-  "1": { time: "13:00" },
-  "2": { time: "14:00" },
-
 };
 
 function isInGrammar(utterance: string) {
@@ -54,24 +42,11 @@ function isInGrammar(utterance: string) {
 }
 
 function getPerson(utterance: string) {
-  return grammar[utterance.toLowerCase()]?.person || null;
+  return (grammar[utterance.toLowerCase()] || {}).person;
 }
-
-function getDay(utterance: string) {
-  return grammar[utterance.toLowerCase()]?.day || null;
-}
-
-function getTime(utterance: string) {
-  return grammar[utterance.toLowerCase()]?.time || null
-}
-export function isRecognisedEvent(event: SpeechStateExternalEvent): event is RecognisedEvent {
-  return event.type === "RECOGNISED" && Array.isArray(event.value);
-}
-
 
 const dmMachine = setup({
   types: {
-
     /** you might need to extend these */
     context: {} as DMContext,
     events: {} as DMEvents,
@@ -94,151 +69,118 @@ const dmMachine = setup({
   context: ({ spawn }) => ({
     spstRef: spawn(speechstate, { input: settings }),
     lastResult: null,
-    name: null,
-    date: null,
-    time: null,
-    allDay: false,
   }),
   id: "DM",
-  initial: "Start",
+  initial: "Prepare",
   states: {
-    Start: {
-      entry: { type: "spst.speak", params: { utterance: `Let's create an appointment` } },
-      on: { SPEAK_COMPLETE: "WaitToStart" },
+    Prepare: {
+      entry: ({ context }) => context.spstRef.send({ type: "PREPARE" }),
+      on: { ASRTTS_READY: "WaitToStart" },
     },
     WaitToStart: {
-      on: { CLICK: "AskName" },
+      on: { CLICK: "Greeting" },
     },
-    AskName: {
-      entry: { type: "spst.speak", params: { utterance: `Who are you meeting with?` } },
-      on: { SPEAK_COMPLETE: "ListenName" },
-    },
-    ListenName: {
-      entry: { type: "spst.listen" },
+    Greeting: {
+      initial: "Prompt",
       on: {
-        RECOGNISED: {
-          actions: assign(({ event }) => ({
-            lastResult: event.value,
-            name: getPerson(event.value[0].utterance) || event.value[0].utterance,
-          })),
-          target: "AskDate",
-        },
-        ASR_NOINPUT: "AskName",
-      },
-    },
-    
-    AskDate: {
-      entry: { type: "spst.speak", params: { utterance: `On which day is your meeting?` } },
-      on: { SPEAK_COMPLETE: "ListenDate" },
-    },
-    ListenDate: {
-      entry: { type: "spst.listen" },
-      on: {
-        RECOGNISED: {
-          actions: assign(({ event }) => ({
-            lastResult: event.value,
-            date: getDay(event.value[0].utterance) || event.value[0].utterance,
-          })),
-          target: "AskAllDay",
-        },
-        ASR_NOINPUT: "AskDate",
-      }, 
-    },
-    AskAllDay: {
-      entry: { type: "spst.speak", params: { utterance: `Will it take the whole day?` } },
-      on: { SPEAK_COMPLETE: "ListenAllDay" },
-    },
-    ListenAllDay: {
-      entry: { type: "spst.listen" },
-      on: {
-        RECOGNISED: [
+        LISTEN_COMPLETE: [
           {
-            cond: ({ event }: { event: SpeechStateExternalEvent }) => 
-              isRecognisedEvent(event) &&
-              ["yes", "yup", "sure", "of course"].includes(event.value[0].utterance.toLowerCase()),
-            actions: assign({ allDay: true }),
-            target: "Confirm",
+            target: "CheckGrammar",
+            guard: ({ context }) => !!context.lastResult,
           },
-          {
-            cond: ({ event }: { event: SpeechStateExternalEvent }) => 
-              isRecognisedEvent(event) &&
-              ["no", "nope", "not at all"].includes(event.value[0].utterance.toLowerCase()),
-            actions: assign({ allDay: false }),
-            target: "AskTime",
-          },
+          { target: ".NoInput" },
         ],
-        ASR_NOINPUT: "AskAllDay",
       },
-    },
-    
-
-    AskTime: {
-      entry: { type: "spst.speak", params: { utterance: `What time is your meeting?` } },
-      on: { SPEAK_COMPLETE: "ListenTime" },
-    },
-
-    ListenTime: {
-      entry: { type: "spst.listen" },
-      on: {
-        RECOGNISED: {
-          actions: assign(({ event }) => ({
-            lastResult: event.value,
-            time: getTime(event.value[0].utterance) || event.value[0].utterance,
-          })),
-
-          target: "Confirm",
+      states: {
+        Prompt: {
+          entry: { type: "spst.speak", params: { utterance: `Hello, let's make an appointment!` } },
+          on: { SPEAK_COMPLETE: "Ask" },
         },
-        ASR_NOINPUT: "AskTime",
+        NoInput: {
+          entry: {
+            type: "spst.speak",
+            params: { utterance: `I can't hear you!` },
+          },
+          on: { SPEAK_COMPLETE: "Ask" },
+        },
+
+        
+        
+
+        Ask: {
+          entry: { type: "spst.listen" },
+          on: {
+            "RECOGNISED": {
+              actions: assign(({ event }) => {
+                return { lastResult: event.value };
+              }),
+            },
+            ASR_NOINPUT: {
+              actions: assign({ lastResult: null }),
+            },
+          },
+        },
+        
+        AskName: {
+          entry: { type: "spst.speak", params: { utterance: `Who are you meeting with?` } },
+          on: {
+            "RECOGNISED": {
+              actions: assign(({ event }) => {
+                return { lastResult: event.value };
+              }),
+            },
+          },
+        },
+
+
+        AskDay: {
+          entry: { type: "spst.speak", params: { utterance: `What day are you meeting?` } },
+          on: {
+            "RECOGNISED": {
+              actions: assign(({ event }) => { 
+                return { lastResult: event.value };
+              }),
+            },
+          },  
+        },
+        AskAllDay: {
+          entry: { type: "spst.speak", params: { utterance: `What day are you meeting?` } },
+          on: {
+            "RECOGNISED": {
+              actions: assign(({ event }) => { 
+                return { lastResult: event.value };
+              }),
+            },
+          },  
+        },
+        AskTime: {
+          entry: { type: "spst.speak", params: { utterance: `What time are you meeting?` } },
+          on: {
+            "RECOGNISED": {
+              actions: assign(({ event }) => { 
+                return { lastResult: event.value };
+              }),
+            },
+          },  
+        },
       },
     },
 
-    Confirm: {
+    CheckGrammar: {
       entry: {
         type: "spst.speak",
-        params: ({ context }) => ({
-          utterance: context.allDay
-          ? `Do you want me to create an appointment with ${context.name} on ${context.date} for the whole day?`
-            : `Do you want me to create an appointment with ${context.name} on ${context.date} at ${context.time}?`,
+        params: ({ context }: { context: DMContext }) => ({
+          utterance: `You just said: ${context.lastResult![0].utterance}. And it ${
+            isInGrammar(context.lastResult![0].utterance) ? "is" : "is not"
+          } in the grammar.`,
         }),
       },
-      on: { SPEAK_COMPLETE: "ListenConfirm" },
+      on: { SPEAK_COMPLETE: "Done" },
     },
-    ListenConfirm: {
-  entry: { type: "spst.listen" },
-  on: {
-    RECOGNISED: [
-      {
-        cond: ({ event }: { event: SpeechStateExternalEvent }) => 
-          isRecognisedEvent(event) &&
-          ["yes", "yup", "sure", "of course"].includes(event.value[0].utterance.toLowerCase()),
-        target: "CreateAppointment",
+    Done: {
+      on: {
+        CLICK: "Greeting",
       },
-      {
-        cond: ({ event }: { event: SpeechStateExternalEvent }) => 
-          isRecognisedEvent(event) &&
-          ["no", "nope", "not at all"].includes(event.value[0].utterance.toLowerCase()),
-        target: "End",
-      },
-    ],
-    ASR_NOINPUT: "Confirm",
-  },
-},
-
-    End: {
-      entry: { type: "spst.speak", params: { utterance: `Goodbye!` } },
-      type: "final",
-    },
-
-
-
-    CreateAppointment: {
-      entry: {
-        type: "spst.speak",
-        params: ({ context }) => ({
-          utterance: `Your appointment has been created with ${context.name} on ${context.date} at ${context.time}...`,
-        }),
-      },
-      on: { SPEAK_COMPLETE: "End" },
     },
   },
 });
