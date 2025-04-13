@@ -6,4 +6,5 @@ export interface DMContext {
   lastResult: Hypothesis[] | null;
 }
 
+
 export type DMEvents = SpeechStateExternalEvent | { type: "CLICK" };

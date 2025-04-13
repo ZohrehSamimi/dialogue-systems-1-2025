@@ -94,14 +94,14 @@ const dmMachine = setup({
       states: {
         Prompt: {
           entry: { type: "spst.speak", params: { utterance: `Hello, let's make an appointment!` } },
-          on: { SPEAK_COMPLETE: "Ask" },
+          on: { SPEAK_COMPLETE: "AskName" },
         },
         NoInput: {
           entry: {
             type: "spst.speak",
             params: { utterance: `I can't hear you!` },
           },
-          on: { SPEAK_COMPLETE: "Ask" },
+          on: { SPEAK_COMPLETE: "AskName" },
         },
 
         
@@ -110,7 +110,7 @@ const dmMachine = setup({
         Ask: {
           entry: { type: "spst.listen" },
           on: {
-            "RECOGNISED": {
+            RECOGNISED: {
               actions: assign(({ event }) => {
                 return { lastResult: event.value };
               }),
@@ -123,15 +123,16 @@ const dmMachine = setup({
         
         AskName: {
           entry: { type: "spst.speak", params: { utterance: `Who are you meeting with?` } },
-          on: {
-            "RECOGNISED": {
-              actions: assign(({ event }) => {
-                return { lastResult: event.value };
-              }),
-            },
+          
+            on: { SPEAK_COMPLETE: "AskName" },
           },
-        },
-
+            entry: {
+              type: "spst.speak",
+              params: { utterance: `I can't hear you!` },
+            },
+            on: { SPEAK_COMPLETE: "AskName" },
+          },
+  
 
         AskDay: {
           entry: { type: "spst.speak", params: { utterance: `What day are you meeting?` } },
@@ -183,7 +184,7 @@ const dmMachine = setup({
       },
     },
   },
-});
+);
 
 const dmActor = createActor(dmMachine, {
   inspect: inspector.inspect,
