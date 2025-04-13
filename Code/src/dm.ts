@@ -45,14 +45,20 @@ function getPerson(utterance: string) {
   return (grammar[utterance.toLowerCase()] || {}).person;
 }
 
+function getDay(utterance: string) {
+  return (grammar[utterance.toLowerCase()] || {}).day;
+}
+
+function getTime(utterance: string) {
+  return (grammar[utterance.toLowerCase()] || {}).time;
+}
+
 const dmMachine = setup({
   types: {
-    /** you might need to extend these */
     context: {} as DMContext,
     events: {} as DMEvents,
   },
   actions: {
-    /** define your actions here */
     "spst.speak": ({ context }, params: { utterance: string }) =>
       context.spstRef.send({
         type: "SPEAK",
@@ -69,6 +75,11 @@ const dmMachine = setup({
   context: ({ spawn }) => ({
     spstRef: spawn(speechstate, { input: settings }),
     lastResult: null,
+    appointment: {
+      person: null,
+      day: null,
+      time: null
+    }
   }),
   id: "DM",
   initial: "Prepare",
@@ -82,15 +93,6 @@ const dmMachine = setup({
     },
     Greeting: {
       initial: "Prompt",
-      on: {
-        LISTEN_COMPLETE: [
-          {
-            target: "CheckGrammar",
-            guard: ({ context }) => !!context.lastResult,
-          },
-          { target: ".NoInput" },
-        ],
-      },
       states: {
         Prompt: {
           entry: { type: "spst.speak", params: { utterance: `Hello, let's make an appointment!` } },
@@ -103,88 +105,190 @@ const dmMachine = setup({
           },
           on: { SPEAK_COMPLETE: "AskName" },
         },
-
-        
-        
-
-        Ask: {
+        AskName: {
+          entry: { type: "spst.speak", params: { utterance: `Who are you meeting with?` } },
+          on: { SPEAK_COMPLETE: "ListenForName" },
+        },
+        ListenForName: {
           entry: { type: "spst.listen" },
           on: {
             RECOGNISED: {
               actions: assign(({ event }) => {
                 return { lastResult: event.value };
               }),
+              target: "#DM.ProcessName",
             },
             ASR_NOINPUT: {
               actions: assign({ lastResult: null }),
+              target: "NoInput",
             },
           },
         },
-        
-        AskName: {
-          entry: { type: "spst.speak", params: { utterance: `Who are you meeting with?` } },
-          
-            on: { SPEAK_COMPLETE: "AskName" },
-          },
-            entry: {
-              type: "spst.speak",
-              params: { utterance: `I can't hear you!` },
-            },
-            on: { SPEAK_COMPLETE: "AskName" },
-          },
-  
-
         AskDay: {
           entry: { type: "spst.speak", params: { utterance: `What day are you meeting?` } },
-          on: {
-            "RECOGNISED": {
-              actions: assign(({ event }) => { 
-                return { lastResult: event.value };
-              }),
-            },
-          },  
+          on: { SPEAK_COMPLETE: "ListenForDay" },
         },
-        AskAllDay: {
-          entry: { type: "spst.speak", params: { utterance: `What day are you meeting?` } },
+        ListenForDay: {
+          entry: { type: "spst.listen" },
           on: {
-            "RECOGNISED": {
+            RECOGNISED: {
               actions: assign(({ event }) => { 
                 return { lastResult: event.value };
               }),
+              target: "#DM.ProcessDay",
+            },
+            ASR_NOINPUT: {
+              actions: assign({ lastResult: null }),
+              target: "NoInput",
             },
           },  
         },
         AskTime: {
           entry: { type: "spst.speak", params: { utterance: `What time are you meeting?` } },
+          on: { SPEAK_COMPLETE: "ListenForTime" },
+        },
+        ListenForTime: {
+          entry: { type: "spst.listen" },
           on: {
-            "RECOGNISED": {
+            RECOGNISED: {
               actions: assign(({ event }) => { 
                 return { lastResult: event.value };
               }),
+              target: "#DM.ProcessTime",
             },
-          },  
+            ASR_NOINPUT: {
+              actions: assign({ lastResult: null }),
+              target: "NoInput",
+            },
+          },
         },
       },
     },
-
-    CheckGrammar: {
+    ProcessName: {
+      entry: [
+        assign(({ context }) => {
+          const utterance = context.lastResult?.[0].utterance || "";
+          const person = getPerson(utterance);
+          return { 
+            appointment: { 
+              ...context.appointment,
+              person 
+            } 
+          };
+        }),
+        {
+          type: "spst.speak",
+          params: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0].utterance || "";
+            const person = getPerson(utterance);
+            if (person) {
+              return { utterance: `Great, you're meeting with ${person}.` };
+            } else {
+              return { utterance: `Sorry, I don't recognize that name.` };
+            }
+          }
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: {
+          target: "Greeting.AskDay",
+          // Only proceed if we understood the person
+          guard: ({ context }) => !!context.appointment.person
+        } 
+      },
+    },
+    ProcessDay: {
+      entry: [
+        assign(({ context }) => {
+          const utterance = context.lastResult?.[0].utterance || "";
+          const day = getDay(utterance);
+          return { 
+            appointment: { 
+              ...context.appointment,
+              day 
+            } 
+          };
+        }),
+        {
+          type: "spst.speak",
+          params: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0].utterance || "";
+            const day = getDay(utterance);
+            if (day) {
+              return { utterance: `You're meeting on ${day}.` };
+            } else {
+              return { utterance: `Sorry, I don't recognize that day.` };
+            }
+          }
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: {
+          target: "Greeting.AskTime",
+          // Only proceed if we understood the day
+          guard: ({ context }) => !!context.appointment.day
+        } 
+      },
+    },
+    ProcessTime: {
+      entry: [
+        assign(({ context }) => {
+          const utterance = context.lastResult?.[0].utterance || "";
+          const time = getTime(utterance);
+          return { 
+            appointment: { 
+              ...context.appointment,
+              time
+            } 
+          };
+        }),
+        {
+          type: "spst.speak",
+          params: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0].utterance || "";
+            const time = getTime(utterance);
+            if (time) {
+              return { utterance: `Your meeting is at ${time}.` };
+            } else {
+              return { utterance: `Sorry, I don't recognize that time.` };
+            }
+          }
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: {
+          target: "SummarizeAppointment",
+          // Only proceed if we understood the time
+          guard: ({ context }) => !!context.appointment.time
+        } 
+      },
+    },
+    SummarizeAppointment: {
       entry: {
         type: "spst.speak",
         params: ({ context }: { context: DMContext }) => ({
-          utterance: `You just said: ${context.lastResult![0].utterance}. And it ${
-            isInGrammar(context.lastResult![0].utterance) ? "is" : "is not"
-          } in the grammar.`,
+          utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
         }),
       },
       on: { SPEAK_COMPLETE: "Done" },
     },
     Done: {
       on: {
-        CLICK: "Greeting",
+        CLICK: {
+          target: "Greeting",
+          actions: assign({
+            lastResult: null,
+            appointment: {
+              person: null,
+              day: null,
+              time: null
+            }
+          })
+        },
       },
     },
   },
-);
+});
 
 const dmActor = createActor(dmMachine, {
   inspect: inspector.inspect,
