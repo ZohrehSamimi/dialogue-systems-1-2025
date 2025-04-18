@@ -1,0 +1,5 @@
+<speak xmlns="http://www.w3.org/2001/10/synthesis" version="1.0" xml:lang="en-US">
+  <voice name="en-US-AriaNeural">
+    <s><emphasis level="moderate">An apple a day</emphasis> keeps the doctor away.</s>
+  </voice>
+</speak>
