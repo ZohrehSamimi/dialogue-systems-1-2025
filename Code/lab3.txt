@@ -1,18 +1,17 @@
-🍎 A – "An apple a day keeps the doctor away"
-<speak xmlns="http://www.w3.org/2001/10/synthesis" version="1.0" xml:lang="en-US">
-  <voice name="en-US-AriaNeural">
-    <s><emphasis level="moderate">An apple a day</emphasis> keeps the doctor away.</s>
-  </voice>
-</speak>
+https://www.youtube.com/watch?v=1mRec3VbH3w
 
-📖 D – "Don't judge a book by its cover"
 <speak xmlns="http://www.w3.org/2001/10/synthesis" version="1.0" xml:lang="en-US">
-  <voice name="en-US-AriaNeural">
-    <p>
-      <s>Don't judge a book</s>
-      <break time="500ms"/>
-      <s>by its cover.</s>
-    </p>
+  <voice name="en-US-GuyNeural">
+  
+    <prosody rate="slow" pitch="3%">
+      <s>Do not go gentle into that good night,</s>
+      <break time="700ms"/>
+      <s>
+      <prosody rate="x-slow">Old age</prosody> should <prosody rate="x-slow">burn and rave </prosody> at <prosody rate="x-slow">close </prosody>of day;
+      </s>
+      <break time="600ms"/>
+      <s><prosody rate="x-slow">Rage</prosody>, <prosody rate="x-slow">rage against the dying of the light</prosody>.</s>
+    </prosody>
   </voice>
 </speak>
 
