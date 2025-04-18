@@ -4,17 +4,30 @@
   </voice>
 </speak> -->
 
-<speak xmlns="http://www.w3.org/2001/10/synthesis" version="1.0" xml:lang="en-US">
+<speak xmlns="http://www.w3.org/2001/10/synthesis" 
+       version="1.0" xml:lang="en-US">
+
   <voice name="en-US-GuyNeural">
-  
+
+
+    <!-- 🎵 Trimmed music intro -->
+    <audio src="https://github.com/ZohrehSamimi/my-public-resources/raw/main/piano_trimmed.mp3"/>
+
     <prosody rate="slow" pitch="3%">
       <s>Do not go gentle into that good night,</s>
       <break time="700ms"/>
       <s>
-      <prosody rate="x-slow">Old age</prosody> should <prosody rate="x-slow">burn and rave </prosody> at <prosody rate="x-slow">close </prosody>of day;
+        <prosody rate="x-slow">Old age</prosody> should 
+        <prosody rate="x-slow">burn and rave </prosody> at 
+        <prosody rate="x-slow">close </prosody>of day;
       </s>
       <break time="600ms"/>
-      <s><prosody rate="x-slow">Rage</prosody>, <prosody rate="x-slow">rage against the dying of the light</prosody>.</s>
+      <s>
+        <prosody rate="x-slow">Rage</prosody>, 
+        <prosody rate="x-slow">rage against the dying of the light</prosody>.
+      </s>
     </prosody>
+    <!-- 🎵 Trimmed music intro -->
+    <audio src="https://github.com/ZohrehSamimi/my-public-resources/raw/main/piano_trimmed.mp3"/>
   </voice>
 </speak>
