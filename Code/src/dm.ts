@@ -428,4 +428,5 @@ export function setupDebugButton(element: HTMLButtonElement) {
     console.log("Debug button clicked - forcing SPEAK_COMPLETE event");
     dmActor.send({ type: "SPEAK_COMPLETE" });
   });
+  
 }
