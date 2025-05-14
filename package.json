@@ -1,7 +1,9 @@
 {
   "dependencies": {
     "@statelyai/inspect": "^0.4.0",
-    "speechstate": "^2.11.0"
+    "@xstate/react": "^5.0.4",
+    "speechstate": "^2.12.0",
+    "xstate": "^5.19.3"
   },
   "devDependencies": {
     "@types/css-modules": "^1.0.5"
