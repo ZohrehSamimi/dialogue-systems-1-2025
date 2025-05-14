@@ -94,12 +94,10 @@ const dmMachine = setup({
         () => console.log("Preparing speech services...")
       ],
       on: { 
-        ASRTTS_READY: [
-          { 
-            target: "WaitToStart",
-            actions: () => console.log("Speech services ready!")
-          }
-        ] 
+        ASRTTS_READY: {
+          target: "WaitToStart",
+          actions: () => console.log("Speech services ready!") 
+        }
       },
     },
     WaitToStart: {
@@ -208,7 +206,14 @@ const dmMachine = setup({
                 }
               }
             },
-            () => console.log("Starting name confirmation speech...")
+            () => console.log("Starting name confirmation speech..."),
+            // Add a timer to auto-complete after speaking
+            () => {
+              setTimeout(() => {
+                console.log("Auto-triggering SPEAK_COMPLETE for name confirmation");
+                dmActor.send({ type: "SPEAK_COMPLETE" });
+              }, 3000);
+            }
           ],
           on: { 
             SPEAK_COMPLETE: [
@@ -256,7 +261,14 @@ const dmMachine = setup({
                 }
               }
             },
-            () => console.log("Starting day confirmation speech...")
+            () => console.log("Starting day confirmation speech..."),
+            // Add a timer to auto-complete after speaking
+            () => {
+              setTimeout(() => {
+                console.log("Auto-triggering SPEAK_COMPLETE for day confirmation");
+                dmActor.send({ type: "SPEAK_COMPLETE" });
+              }, 3000);
+            }
           ],
           on: { 
             SPEAK_COMPLETE: [
@@ -304,7 +316,14 @@ const dmMachine = setup({
                 }
               }
             },
-            () => console.log("Starting time confirmation speech...")
+            () => console.log("Starting time confirmation speech..."),
+            // Add a timer to auto-complete after speaking
+            () => {
+              setTimeout(() => {
+                console.log("Auto-triggering SPEAK_COMPLETE for time confirmation");
+                dmActor.send({ type: "SPEAK_COMPLETE" });
+              }, 3000);
+            }
           ],
           on: { 
             SPEAK_COMPLETE: [
@@ -323,15 +342,26 @@ const dmMachine = setup({
       }
     },
     SummarizeAppointment: {
-      entry: {
-        type: "spst.speak",
-        params: ({ context }: { context: DMContext }) => ({
-          utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
-        }),
-      },
+      entry: [
+        {
+          type: "spst.speak",
+          params: ({ context }: { context: DMContext }) => ({
+            utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
+          }),
+        },
+        () => console.log("Summarizing appointment details..."),
+        // Auto-complete the summary after 4 seconds
+        () => {
+          setTimeout(() => {
+            console.log("Auto-triggering SPEAK_COMPLETE for appointment summary");
+            dmActor.send({ type: "SPEAK_COMPLETE" });
+          }, 4000);
+        }
+      ],
       on: { SPEAK_COMPLETE: "Done" },
     },
     Done: {
+      entry: () => console.log("Appointment successfully booked!"),
       on: {
         CLICK: {
           target: "Greeting",
