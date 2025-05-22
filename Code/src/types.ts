@@ -11,6 +11,7 @@ export interface DMContext {
   spstRef: AnyActorRef;
   lastResult: Hypothesis[] | null;
   appointment: Appointment;
+  nluResult?: any;
 }
 
 export type DMEvents = SpeechStateExternalEvent | { type: "CLICK" };
