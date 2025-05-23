@@ -25,6 +25,7 @@ interface GrammarEntry {
   person?: string;
   day?: string;
   time?: string;
+  wholeDay?: boolean;
 }
 
 const grammar: { [index: string]: GrammarEntry } = {
@@ -51,6 +52,10 @@ function getDay(utterance: string) {
 
 function getTime(utterance: string) {
   return (grammar[utterance.toLowerCase()] || {}).time;
+}
+
+function getWholeDay(utterance: string) {
+  return (grammar[utterance.toLowerCase()] || {}).wholeDay;
 }
 
 const dmMachine = setup({
@@ -82,7 +87,8 @@ const dmMachine = setup({
     appointment: {
       person: null,
       day: null,
-      time: null
+      time: null,
+      wholeDay: false
     }
   }),
   id: "DM",
@@ -148,6 +154,25 @@ const dmMachine = setup({
                 return { lastResult: event.value };
               }),
               target: "#DM.ProcessDay.UpdateDay",
+            },
+            ASR_NOINPUT: {
+              actions: assign({ lastResult: null }),
+              target: "NoInput",
+            },
+          },  
+        },
+        AskWholeDay: {
+          entry: { type: "spst.speak", params: { utterance: `Is it a whole day meeting?` } },
+          on: { SPEAK_COMPLETE: "ListenForWholeDay" },
+        },
+        ListenForWholeDay: {  
+          entry: { type: "spst.listen" },
+          on: {
+            RECOGNISED: {
+              actions: assign(({ event }) => { 
+                return { lastResult: event.value };
+              }),
+              target: "#DM.ProcessWholeDay.UpdateWholeDay",
             },
             ASR_NOINPUT: {
               actions: assign({ lastResult: null }),
@@ -273,13 +298,68 @@ const dmMachine = setup({
           on: { 
             SPEAK_COMPLETE: [
               {
-                target: "#DM.Greeting.AskTime",
+                target: "#DM.Greeting.AskWholeDay",
                 guard: ({ context }) => !!context.appointment.day,
-                actions: () => console.log("Speech complete, moving to AskTime")
+                actions: () => console.log("Speech complete, moving to AskWholeDay")
               },
               {
                 target: "#DM.Greeting.AskDay",
                 actions: () => console.log("Speech complete, but no valid day - returning to AskDay")
+              }
+            ]
+          }
+        }
+      }
+    },
+    ProcessWholeDay: {
+      initial: "UpdateWholeDay",
+      states: {
+        UpdateWholeDay: {
+          entry: assign(({ context }) => {
+            const utterance = context.lastResult?.[0].utterance || "";
+            const wholeDay = utterance.toLowerCase().includes("yes");
+            return { 
+              appointment: { 
+                ...context.appointment,
+                wholeDay: wholeDay
+              } 
+            };
+          }),
+          always: "SpeakConfirmation"
+        },
+        SpeakConfirmation: {
+          entry: [
+            {
+              type: "spst.speak",
+              params: ({ context }: { context: DMContext }) => {
+                const wholeDay = context.appointment.wholeDay;
+                if (wholeDay) {
+                  return { utterance: `Great! It's a whole day meeting.` };
+                } else {
+                  return { utterance: `Okay, it's not a whole day meeting.` };
+                }
+              }
+            },
+            () => console.log("Starting whole day confirmation speech..."),
+            // Add a timer to auto-complete after speaking
+            () => {
+              setTimeout(() => {
+                console.log("Auto-triggering SPEAK_COMPLETE for whole day confirmation");
+                dmActor.send({ type: "SPEAK_COMPLETE" });
+              }, 3000);
+            }
+          ],
+          on: { 
+            SPEAK_COMPLETE: [
+              {
+                target: "#DM.Greeting.AskTime",
+                guard: ({ context }) => !context.appointment.wholeDay,
+                actions: () => console.log("Speech complete, not whole day - moving to AskTime")
+              },
+              {
+                target: "#DM.SummarizeAppointment",
+                guard: ({ context }) => context.appointment.wholeDay,
+                actions: () => console.log("Speech complete, whole day meeting - moving to Summary")
               }
             ]
           }
@@ -345,9 +425,17 @@ const dmMachine = setup({
       entry: [
         {
           type: "spst.speak",
-          params: ({ context }: { context: DMContext }) => ({
-            utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
-          }),
+          params: ({ context }: { context: DMContext }) => {
+            if (context.appointment.wholeDay) {
+              return {
+                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} for the whole day.`,
+              };
+            } else {
+              return {
+                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
+              };
+            }
+          },
         },
         () => console.log("Summarizing appointment details..."),
         // Auto-complete the summary after 4 seconds
@@ -370,7 +458,8 @@ const dmMachine = setup({
             appointment: {
               person: null,
               day: null,
-              time: null
+              time: null,
+              wholeDay: false
             }
           })
         },
@@ -428,5 +517,4 @@ export function setupDebugButton(element: HTMLButtonElement) {
     console.log("Debug button clicked - forcing SPEAK_COMPLETE event");
     dmActor.send({ type: "SPEAK_COMPLETE" });
   });
-  
 }

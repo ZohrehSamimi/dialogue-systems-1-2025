@@ -5,6 +5,7 @@ export interface Appointment {
   person: string | null;
   day: string | null;
   time: string | null;
+  wholeDay: boolean;
 }
 
 export interface DMContext {
