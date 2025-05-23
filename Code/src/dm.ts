@@ -16,7 +16,7 @@ const settings: Settings = {
   azureCredentials: azureCredentials,
   azureRegion: "northeurope",
   asrDefaultCompleteTimeout: 0,
-  asrDefaultNoInputTimeout: 5000,
+  asrDefaultNoInputTimeout: 8000, // Increased timeout
   locale: "en-US",
   ttsDefaultVoice: "en-US-DavisNeural",
 };
@@ -138,7 +138,7 @@ const dmMachine = setup({
             },
             ASR_NOINPUT: {
               actions: assign({ lastResult: null }),
-              target: "NoInput",
+              target: "AskName",
             },
           },
         },
@@ -157,7 +157,7 @@ const dmMachine = setup({
             },
             ASR_NOINPUT: {
               actions: assign({ lastResult: null }),
-              target: "NoInput",
+              target: "AskDay",
             },
           },  
         },
@@ -176,7 +176,7 @@ const dmMachine = setup({
             },
             ASR_NOINPUT: {
               actions: assign({ lastResult: null }),
-              target: "NoInput",
+              target: "AskWholeDay",
             },
           },  
         },
@@ -185,17 +185,27 @@ const dmMachine = setup({
           on: { SPEAK_COMPLETE: "ListenForTime" },
         },
         ListenForTime: {
-          entry: { type: "spst.listen" },
+          entry: [
+            { type: "spst.listen" },
+            () => console.log("=== LISTENING FOR TIME INPUT ===")
+          ],
           on: {
             RECOGNISED: {
-              actions: assign(({ event }) => { 
-                return { lastResult: event.value };
-              }),
+              actions: [
+                assign(({ event }) => { 
+                  console.log("=== TIME RECOGNIZED ===", event.value);
+                  return { lastResult: event.value };
+                }),
+                () => console.log("Time input received, moving to ProcessTime")
+              ],
               target: "#DM.ProcessTime.UpdateTime",
             },
             ASR_NOINPUT: {
-              actions: assign({ lastResult: null }),
-              target: "NoInput",
+              actions: [
+                assign({ lastResult: null }),
+                () => console.log("=== NO TIME INPUT DETECTED ===")
+              ],
+              target: "AskTime",
             },
           },
         },
@@ -366,20 +376,27 @@ const dmMachine = setup({
         }
       }
     },
-    ProcessTime: {
+        ProcessTime: {
       initial: "UpdateTime",
       states: {
         UpdateTime: {
-          entry: assign(({ context }) => {
-            const utterance = context.lastResult?.[0].utterance || "";
-            const time = getTime(utterance);
-            return { 
-              appointment: { 
-                ...context.appointment,
-                time: time || null
-              } 
-            };
-          }),
+          entry: [
+            assign(({ context }) => {
+              const utterance = context.lastResult?.[0].utterance || "";
+              const time = getTime(utterance);
+              console.log("ProcessTime.UpdateTime - utterance:", utterance);
+              console.log("ProcessTime.UpdateTime - extracted time:", time);
+              return { 
+                appointment: { 
+                  ...context.appointment,
+                  time: time || null
+                } 
+              };
+            }),
+            ({ context }) => {
+              console.log("ProcessTime.UpdateTime - updated appointment:", context.appointment);
+            }
+          ],
           always: "SpeakConfirmation"
         },
         SpeakConfirmation: {
@@ -387,8 +404,8 @@ const dmMachine = setup({
             {
               type: "spst.speak",
               params: ({ context }: { context: DMContext }) => {
-                const utterance = context.lastResult?.[0].utterance || "";
-                const time = getTime(utterance);
+                const time = context.appointment.time;
+                console.log("ProcessTime.SpeakConfirmation - about to speak, time:", time);
                 if (time) {
                   return { utterance: `Your meeting is at ${time}.` };
                 } else {
@@ -396,7 +413,7 @@ const dmMachine = setup({
                 }
               }
             },
-            () => console.log("Starting time confirmation speech..."),
+            () => console.log("ProcessTime.SpeakConfirmation - speech started"),
             // Add a timer to auto-complete after speaking
             () => {
               setTimeout(() => {
@@ -409,12 +426,17 @@ const dmMachine = setup({
             SPEAK_COMPLETE: [
               {
                 target: "#DM.SummarizeAppointment",
-                guard: ({ context }) => !!context.appointment.time,
-                actions: () => console.log("Speech complete, moving to Summarize")
+                guard: ({ context }) => {
+                  const hasTime = !!context.appointment.time;
+                  console.log("ProcessTime.SpeakConfirmation - SPEAK_COMPLETE guard check, hasTime:", hasTime);
+                  console.log("ProcessTime.SpeakConfirmation - current appointment:", context.appointment);
+                  return hasTime;
+                },
+                actions: () => console.log("ProcessTime.SpeakConfirmation - moving to Summarize")
               },
               {
                 target: "#DM.Greeting.AskTime",
-                actions: () => console.log("Speech complete, but no valid time - returning to AskTime")
+                actions: () => console.log("ProcessTime.SpeakConfirmation - no valid time, returning to AskTime")
               }
             ]
           }
@@ -428,11 +450,11 @@ const dmMachine = setup({
           params: ({ context }: { context: DMContext }) => {
             if (context.appointment.wholeDay) {
               return {
-                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} for the whole day.`,
+                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} for the whole day. goodbye!`,
               };
             } else {
               return {
-                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
+                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}. Goodbye!`,
               };
             }
           },
