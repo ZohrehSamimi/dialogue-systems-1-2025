@@ -88,7 +88,8 @@ const dmMachine = setup({
       person: null,
       day: null,
       time: null,
-      wholeDay: false
+      wholeDay: false,
+      confirmation: false
     }
   }),
   id: "DM",
@@ -376,7 +377,7 @@ const dmMachine = setup({
         }
       }
     },
-        ProcessTime: {
+    ProcessTime: {
       initial: "UpdateTime",
       states: {
         UpdateTime: {
@@ -450,17 +451,16 @@ const dmMachine = setup({
           params: ({ context }: { context: DMContext }) => {
             if (context.appointment.wholeDay) {
               return {
-                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} for the whole day. goodbye!`,
+                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} for the whole day.`,
               };
             } else {
               return {
-                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}. Goodbye!`,
+                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
               };
             }
           },
         },
         () => console.log("Summarizing appointment details..."),
-        // Auto-complete the summary after 4 seconds
         () => {
           setTimeout(() => {
             console.log("Auto-triggering SPEAK_COMPLETE for appointment summary");
@@ -468,10 +468,71 @@ const dmMachine = setup({
           }, 4000);
         }
       ],
-      on: { SPEAK_COMPLETE: "Done" },
+      on: { SPEAK_COMPLETE: "ConfirmAppointment" }
+    },
+    ConfirmAppointment: {
+      entry: [
+        {
+          type: "spst.speak",
+          params: ({ context }: { context: DMContext }) => {
+            const { person, day, time, wholeDay } = context.appointment;
+            const summary = wholeDay
+              ? `Do you want to confirm the meeting with ${person} on ${day} for the whole day?`
+              : `Do you want to confirm the meeting with ${person} on ${day} at ${time}?`;
+            return { utterance: summary };
+          }
+        },
+        () => console.log("Prompting for final confirmation..."),
+        // Add auto-trigger for SPEAK_COMPLETE
+        () => {
+          setTimeout(() => {
+            console.log("Auto-triggering SPEAK_COMPLETE for confirmation question");
+            dmActor.send({ type: "SPEAK_COMPLETE" });
+          }, 4000);
+        }
+      ],
+      on: { SPEAK_COMPLETE: "ListenForConfirmation" }
+    },
+    ListenForConfirmation: {
+      entry: { type: "spst.listen" },
+      on: {
+        RECOGNISED: [
+          {
+            target: "Done",
+            guard: ({ event }) => event.value[0].utterance.toLowerCase().includes("yes"),
+            actions: assign(({ context }) => ({ 
+              appointment: { ...context.appointment, confirmation: true } 
+            }))
+          },
+          {
+            target: "#DM.Greeting.AskName",
+            guard: ({ event }) => event.value[0].utterance.toLowerCase().includes("no"),
+            actions: assign({
+              appointment: {
+                person: null,
+                day: null,
+                time: null,
+                wholeDay: false,
+                confirmation: false
+              },
+              lastResult: null
+            })
+          }
+        ],
+        ASR_NOINPUT: {
+          actions: assign({ lastResult: null }),
+          target: "ConfirmAppointment"
+        }
+      }
     },
     Done: {
-      entry: () => console.log("Appointment successfully booked!"),
+      entry: ({ context }) => {
+        if (context.appointment.confirmation) {
+          console.log("Appointment successfully booked!");
+        } else {
+          console.log("Confirmation not received, should not be here!");
+        }
+      },
       on: {
         CLICK: {
           target: "Greeting",
@@ -481,13 +542,14 @@ const dmMachine = setup({
               person: null,
               day: null,
               time: null,
-              wholeDay: false
+              wholeDay: false,
+              confirmation: false
             }
           })
-        },
-      },
-    },
-  },
+        }
+      }
+    }
+  }
 });
 
 const dmActor = createActor(dmMachine, {
