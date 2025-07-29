@@ -3,6 +3,7 @@ import { Settings, speechstate } from "speechstate";
 import { createBrowserInspector } from "@statelyai/inspect";
 import { KEY } from "./azure";
 import { DMContext, DMEvents } from "./types";
+import { RecognitionResult } from "./types";
 
 const inspector = createBrowserInspector();
 
@@ -16,7 +17,7 @@ const settings: Settings = {
   azureCredentials: azureCredentials,
   azureRegion: "northeurope",
   asrDefaultCompleteTimeout: 0,
-  asrDefaultNoInputTimeout: 8000, // Increased timeout
+  asrDefaultNoInputTimeout: 8000,
   locale: "en-US",
   ttsDefaultVoice: "en-US-DavisNeural",
 };
@@ -25,7 +26,6 @@ interface GrammarEntry {
   person?: string;
   day?: string;
   time?: string;
-  wholeDay?: boolean;
 }
 
 const grammar: { [index: string]: GrammarEntry } = {
@@ -34,28 +34,114 @@ const grammar: { [index: string]: GrammarEntry } = {
   victoria: { person: "Victoria Daniilidou" },
   monday: { day: "Monday" },
   tuesday: { day: "Tuesday" },
+  wednesday: { day: "Wednesday" },
+  thursday: { day: "Thursday" },
+  friday: { day: "Friday" },
   "10": { time: "10:00" },
   "11": { time: "11:00" },
+  "12": { time: "12:00" },
+  "1": { time: "1:00" },
+  "2": { time: "2:00" },
+  "3": { time: "3:00" },
+  "4": { time: "4:00" },
+  "5": { time: "5:00" },
+  "6": { time: "6:00" },
+  "7": { time: "7:00" },
+  "8": { time: "8:00" },
+  "9": { time: "9:00" },
+  "ten": { time: "10:00" },
+  "eleven": { time: "11:00" },
+  "twelve": { time: "12:00" },
+  "one": { time: "1:00" },
+  "two": { time: "2:00" },
+  "three": { time: "3:00" },
+  "four": { time: "4:00" },
+  "five": { time: "5:00" },
+  "six": { time: "6:00" },
+  "seven": { time: "7:00" },
+  "eight": { time: "8:00" },
+  "nine": { time: "9:00" },
 };
 
-function isInGrammar(utterance: string) {
-  return utterance.toLowerCase() in grammar;
+interface Hypothesis {
+  utterance: string;
+  confidence: number;
 }
 
-function getPerson(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).person;
+function isRecognisedEvent(event: DMEvents): event is { type: "RECOGNISED"; value: Hypothesis[] } {
+  return event.type === "RECOGNISED" && Array.isArray((event as any).value);
+}
+
+
+
+function getPerson(utterance: string): string | null {
+  const lower = utterance.toLowerCase();
+  console.log("getPerson - checking utterance:", lower);
+  
+  // Direct match first
+  if (grammar[lower]?.person) {
+    console.log("getPerson - direct match found:", grammar[lower].person);
+    return grammar[lower].person;
+  }
+  
+  // Check for partial matches
+  for (const key in grammar) {
+    if (grammar[key].person && lower.includes(key)) {
+      console.log("getPerson - partial match found:", grammar[key].person);
+      return grammar[key].person;
+    }
+  }
+  
+  console.log("getPerson - no match found");
+  return null;
 }
 
 function getDay(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).day;
+  const lower = utterance.toLowerCase();
+  for (const key in grammar) {
+    if (grammar[key].day && lower.includes(key)) {
+      return grammar[key].day;
+    }
+  }
+  return null;
 }
 
 function getTime(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).time;
+  const lower = utterance.toLowerCase().trim();
+  
+  // Direct match
+  if (grammar[lower]?.time) {
+    return grammar[lower].time;
+  }
+  
+  // Check for partial matches
+  for (const key in grammar) {
+    if (grammar[key].time && lower.includes(key)) {
+      return grammar[key].time;
+    }
+  }
+  
+  // Handle "o'clock" format
+  const match = lower.match(/(\w+)\s*o'?clock/);
+  if (match && grammar[match[1]]?.time) {
+    return grammar[match[1]].time;
+  }
+  
+  return null;
 }
 
-function getWholeDay(utterance: string) {
-  return (grammar[utterance.toLowerCase()] || {}).wholeDay;
+function isYesResponse(utterance: string): boolean {
+  const lower = utterance.toLowerCase();
+  return ["yes", "yeah", "yep", "sure", "ok", "okay", "yup", "correct", "right", "absolutely"].some(word => 
+    lower.includes(word)
+  );
+}
+
+function isNoResponse(utterance: string): boolean {
+  const lower = utterance.toLowerCase();
+  return ["no", "nope", "not", "nah", "negative", "don't", "doesnt", "doesn't"].some(word => 
+    lower.includes(word)
+  );
 }
 
 const dmMachine = setup({
@@ -68,19 +154,20 @@ const dmMachine = setup({
       console.log(`Speaking: "${params.utterance}"`);
       context.spstRef.send({
         type: "SPEAK",
-        value: {
-          utterance: params.utterance,
-        },
+        value: { utterance: params.utterance },
       });
     },
     "spst.listen": ({ context }) => {
       console.log("Starting to listen...");
-      context.spstRef.send({
-        type: "LISTEN",
-      });
+      context.spstRef.send({ type: "LISTEN" });
     },
+    "logError": (_, params: { error: string }) => {
+      console.error("Error:", params.error);
+    }
   },
 }).createMachine({
+  id: "DM",
+  initial: "Prepare",
   context: ({ spawn }) => ({
     spstRef: spawn(speechstate, { input: settings }),
     lastResult: null,
@@ -89,463 +176,602 @@ const dmMachine = setup({
       day: null,
       time: null,
       wholeDay: false,
-      confirmation: false
-    }
+      confirmation: false,
+    },
   }),
-  id: "DM",
-  initial: "Prepare",
   states: {
     Prepare: {
-      entry: [
-        ({ context }) => context.spstRef.send({ type: "PREPARE" }),
-        () => console.log("Preparing speech services...")
-      ],
+      entry: ({ context }: { context: DMContext }) => {
+        console.log("Preparing speech services...");
+        context.spstRef.send({ type: "PREPARE" });
+      },
       on: { 
         ASRTTS_READY: {
           target: "WaitToStart",
-          actions: () => console.log("Speech services ready!") 
+          actions: () => console.log("Speech services ready!")
+        },
+        ASRTTS_ERROR: {
+          actions: { type: "logError", params: { error: "Failed to prepare speech services" } }
         }
       },
     },
     WaitToStart: {
-      on: { CLICK: "Greeting" },
+      on: { CLICK: "Welcome" },
     },
-    Greeting: {
-      initial: "Prompt",
-      states: {
-        Prompt: {
-          entry: { type: "spst.speak", params: { utterance: `Hello, let's make an appointment!` } },
-          on: { SPEAK_COMPLETE: "AskName" },
+    Welcome: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Welcome! Let's schedule your appointment." },
+      },
+      on: { 
+        SPEAK_COMPLETE: "AskName",
+        SPEAK_ERROR: {
+          target: "AskName",
+          actions: { type: "logError", params: { error: "Speech error in Welcome" } }
+        }
+      },
+    },
+    AskName: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Who is the appointment with? Say Vlad, Aya, or Victoria." },
+      },
+      on: { 
+        SPEAK_COMPLETE: "WaitBeforeListenName",
+        SPEAK_ERROR: {
+          target: "WaitBeforeListenName",
+          actions: { type: "logError", params: { error: "Speech error in AskName" } }
+        }
+      },
+    },
+    WaitBeforeListenName: {
+      after: {
+        500: "ListenName"
+      }
+    },
+    ListenName: {
+      entry: "spst.listen",
+      on: {
+        RECOGNISED: {
+          actions: [
+              assign(({ event }) => ({ lastResult: event.value })),
+              ({ event }) => console.log("Recognized:", event.value[0].utterance)
+  ],
+          target: "ProcessName"
+},
+        ASR_NOINPUT: {
+          target: "NoInputName",
+          actions: () => console.log("No input detected")
         },
-        NoInput: {
-          entry: {
-            type: "spst.speak",
-            params: { utterance: `I can't hear you!` },
-          },
-          on: { SPEAK_COMPLETE: "AskName" },
-        },
-        AskName: {
-          entry: { type: "spst.speak", params: { utterance: `Who are you meeting with?` } },
-          on: { SPEAK_COMPLETE: "ListenForName" },
-        },
-        ListenForName: {
-          entry: { type: "spst.listen" },
-          on: {
-            RECOGNISED: {
-              actions: assign(({ event }) => {
-                return { lastResult: event.value };
-              }),
-              target: "#DM.ProcessName.UpdateName",
-            },
-            ASR_NOINPUT: {
-              actions: assign({ lastResult: null }),
-              target: "AskName",
-            },
-          },
-        },
-        AskDay: {
-          entry: { type: "spst.speak", params: { utterance: `What day are you meeting?` } },
-          on: { SPEAK_COMPLETE: "ListenForDay" },
-        },
-        ListenForDay: {
-          entry: { type: "spst.listen" },
-          on: {
-            RECOGNISED: {
-              actions: assign(({ event }) => { 
-                return { lastResult: event.value };
-              }),
-              target: "#DM.ProcessDay.UpdateDay",
-            },
-            ASR_NOINPUT: {
-              actions: assign({ lastResult: null }),
-              target: "AskDay",
-            },
-          },  
-        },
-        AskWholeDay: {
-          entry: { type: "spst.speak", params: { utterance: `Is it a whole day meeting?` } },
-          on: { SPEAK_COMPLETE: "ListenForWholeDay" },
-        },
-        ListenForWholeDay: {  
-          entry: { type: "spst.listen" },
-          on: {
-            RECOGNISED: {
-              actions: assign(({ event }) => { 
-                return { lastResult: event.value };
-              }),
-              target: "#DM.ProcessWholeDay.UpdateWholeDay",
-            },
-            ASR_NOINPUT: {
-              actions: assign({ lastResult: null }),
-              target: "AskWholeDay",
-            },
-          },  
-        },
-        AskTime: {
-          entry: { type: "spst.speak", params: { utterance: `What time are you meeting?` } },
-          on: { SPEAK_COMPLETE: "ListenForTime" },
-        },
-        ListenForTime: {
-          entry: [
-            { type: "spst.listen" },
-            () => console.log("=== LISTENING FOR TIME INPUT ===")
-          ],
-          on: {
-            RECOGNISED: {
-              actions: [
-                assign(({ event }) => { 
-                  console.log("=== TIME RECOGNIZED ===", event.value);
-                  return { lastResult: event.value };
-                }),
-                () => console.log("Time input received, moving to ProcessTime")
-              ],
-              target: "#DM.ProcessTime.UpdateTime",
-            },
-            ASR_NOINPUT: {
-              actions: [
-                assign({ lastResult: null }),
-                () => console.log("=== NO TIME INPUT DETECTED ===")
-              ],
-              target: "AskTime",
-            },
-          },
-        },
+        ASR_ERROR: {
+          target: "AskName",
+          actions: { type: "logError", params: { error: "ASR error" } }
+        }
       },
     },
     ProcessName: {
-      initial: "UpdateName",
-      states: {
-        UpdateName: {
-          entry: assign(({ context }) => {
-            const utterance = context.lastResult?.[0].utterance || "";
+      entry: ({ context }: { context: DMContext }) => {
+        const utterance = context.lastResult?.[0]?.utterance || "";
+        const person = getPerson(utterance);
+        console.log("ProcessName - utterance:", utterance);
+        console.log("ProcessName - person found:", person);
+      },
+      always: [
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
             const person = getPerson(utterance);
-            return { 
+            console.log("Guard checking - person:", person);
+            return !!person;
+          },
+          target: "ConfirmName",
+          actions: assign(({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            const person = getPerson(utterance);
+            console.log("Assigning person:", person);
+            return {
               appointment: { 
-                ...context.appointment,
+                ...context.appointment, 
                 person: person || null
-              } 
+              }
             };
-          }),
-          always: "SpeakConfirmation"
+          })
         },
-        SpeakConfirmation: {
-          entry: [
-            {
-              type: "spst.speak",
-              params: ({ context }: { context: DMContext }) => {
-                const utterance = context.lastResult?.[0].utterance || "";
-                const person = getPerson(utterance);
-                if (person) {
-                  return { utterance: `Great, you're meeting with ${person}.` };
-                } else {
-                  return { utterance: `Sorry, I don't recognize that name.` };
-                }
-              }
-            },
-            () => console.log("Starting name confirmation speech..."),
-            // Add a timer to auto-complete after speaking
-            () => {
-              setTimeout(() => {
-                console.log("Auto-triggering SPEAK_COMPLETE for name confirmation");
-                dmActor.send({ type: "SPEAK_COMPLETE" });
-              }, 3000);
-            }
-          ],
-          on: { 
-            SPEAK_COMPLETE: [
-              {
-                target: "#DM.Greeting.AskDay",
-                guard: ({ context }) => !!context.appointment.person,
-                actions: () => console.log("Speech complete, moving to AskDay")
-              },
-              {
-                target: "#DM.Greeting.AskName",
-                actions: () => console.log("Speech complete, but no valid person - returning to AskName")
-              }
-            ]
-          }
+        { 
+          target: "InvalidName",
+          actions: () => console.log("No valid person found, going to InvalidName")
         }
-      }
+      ]
     },
-    ProcessDay: {
-      initial: "UpdateDay",
-      states: {
-        UpdateDay: {
-          entry: assign(({ context }) => {
-            const utterance = context.lastResult?.[0].utterance || "";
-            const day = getDay(utterance);
-            return { 
-              appointment: { 
-                ...context.appointment,
-                day: day || null
-              } 
-            };
-          }),
-          always: "SpeakConfirmation"
-        },
-        SpeakConfirmation: {
-          entry: [
-            {
-              type: "spst.speak",
-              params: ({ context }: { context: DMContext }) => {
-                const utterance = context.lastResult?.[0].utterance || "";
-                const day = getDay(utterance);
-                if (day) {
-                  return { utterance: `You're meeting on ${day}.` };
-                } else {
-                  return { utterance: `Sorry, I don't recognize that day.` };
-                }
-              }
-            },
-            () => console.log("Starting day confirmation speech..."),
-            // Add a timer to auto-complete after speaking
-            () => {
-              setTimeout(() => {
-                console.log("Auto-triggering SPEAK_COMPLETE for day confirmation");
-                dmActor.send({ type: "SPEAK_COMPLETE" });
-              }, 3000);
-            }
-          ],
-          on: { 
-            SPEAK_COMPLETE: [
-              {
-                target: "#DM.Greeting.AskWholeDay",
-                guard: ({ context }) => !!context.appointment.day,
-                actions: () => console.log("Speech complete, moving to AskWholeDay")
-              },
-              {
-                target: "#DM.Greeting.AskDay",
-                actions: () => console.log("Speech complete, but no valid day - returning to AskDay")
-              }
-            ]
-          }
-        }
-      }
+    NoInputName: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "I didn't hear anything. Please tell me who you're meeting with." },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenName" },
     },
-    ProcessWholeDay: {
-      initial: "UpdateWholeDay",
-      states: {
-        UpdateWholeDay: {
-          entry: assign(({ context }) => {
-            const utterance = context.lastResult?.[0].utterance || "";
-            const wholeDay = utterance.toLowerCase().includes("yes");
-            return { 
-              appointment: { 
-                ...context.appointment,
-                wholeDay: wholeDay
-              } 
-            };
-          }),
-          always: "SpeakConfirmation"
-        },
-        SpeakConfirmation: {
-          entry: [
-            {
-              type: "spst.speak",
-              params: ({ context }: { context: DMContext }) => {
-                const wholeDay = context.appointment.wholeDay;
-                if (wholeDay) {
-                  return { utterance: `Great! It's a whole day meeting.` };
-                } else {
-                  return { utterance: `Okay, it's not a whole day meeting.` };
-                }
-              }
-            },
-            () => console.log("Starting whole day confirmation speech..."),
-            // Add a timer to auto-complete after speaking
-            () => {
-              setTimeout(() => {
-                console.log("Auto-triggering SPEAK_COMPLETE for whole day confirmation");
-                dmActor.send({ type: "SPEAK_COMPLETE" });
-              }, 3000);
-            }
-          ],
-          on: { 
-            SPEAK_COMPLETE: [
-              {
-                target: "#DM.Greeting.AskTime",
-                guard: ({ context }) => !context.appointment.wholeDay,
-                actions: () => console.log("Speech complete, not whole day - moving to AskTime")
-              },
-              {
-                target: "#DM.SummarizeAppointment",
-                guard: ({ context }) => context.appointment.wholeDay,
-                actions: () => console.log("Speech complete, whole day meeting - moving to Summary")
-              }
-            ]
-          }
-        }
-      }
+    InvalidName: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "I didn't understand. Please say Vlad, Aya, or Victoria." },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenName" },
     },
-    ProcessTime: {
-      initial: "UpdateTime",
-      states: {
-        UpdateTime: {
-          entry: [
-            assign(({ context }) => {
-              const utterance = context.lastResult?.[0].utterance || "";
-              const time = getTime(utterance);
-              console.log("ProcessTime.UpdateTime - utterance:", utterance);
-              console.log("ProcessTime.UpdateTime - extracted time:", time);
-              return { 
-                appointment: { 
-                  ...context.appointment,
-                  time: time || null
-                } 
-              };
-            }),
-            ({ context }) => {
-              console.log("ProcessTime.UpdateTime - updated appointment:", context.appointment);
-            }
-          ],
-          always: "SpeakConfirmation"
-        },
-        SpeakConfirmation: {
-          entry: [
-            {
-              type: "spst.speak",
-              params: ({ context }: { context: DMContext }) => {
-                const time = context.appointment.time;
-                console.log("ProcessTime.SpeakConfirmation - about to speak, time:", time);
-                if (time) {
-                  return { utterance: `Your meeting is at ${time}.` };
-                } else {
-                  return { utterance: `Sorry, I don't recognize that time.` };
-                }
-              }
-            },
-            () => console.log("ProcessTime.SpeakConfirmation - speech started"),
-            // Add a timer to auto-complete after speaking
-            () => {
-              setTimeout(() => {
-                console.log("Auto-triggering SPEAK_COMPLETE for time confirmation");
-                dmActor.send({ type: "SPEAK_COMPLETE" });
-              }, 3000);
-            }
-          ],
-          on: { 
-            SPEAK_COMPLETE: [
-              {
-                target: "#DM.SummarizeAppointment",
-                guard: ({ context }) => {
-                  const hasTime = !!context.appointment.time;
-                  console.log("ProcessTime.SpeakConfirmation - SPEAK_COMPLETE guard check, hasTime:", hasTime);
-                  console.log("ProcessTime.SpeakConfirmation - current appointment:", context.appointment);
-                  return hasTime;
-                },
-                actions: () => console.log("ProcessTime.SpeakConfirmation - moving to Summarize")
-              },
-              {
-                target: "#DM.Greeting.AskTime",
-                actions: () => console.log("ProcessTime.SpeakConfirmation - no valid time, returning to AskTime")
-              }
-            ]
-          }
-        }
-      }
-    },
-    SummarizeAppointment: {
+    ConfirmName: {
       entry: [
-        {
-          type: "spst.speak",
-          params: ({ context }: { context: DMContext }) => {
-            if (context.appointment.wholeDay) {
-              return {
-                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} for the whole day.`,
-              };
-            } else {
-              return {
-                utterance: `Your appointment with ${context.appointment.person} is on ${context.appointment.day} at ${context.appointment.time}.`,
-              };
-            }
-          },
-        },
-        () => console.log("Summarizing appointment details..."),
-        () => {
-          setTimeout(() => {
-            console.log("Auto-triggering SPEAK_COMPLETE for appointment summary");
-            dmActor.send({ type: "SPEAK_COMPLETE" });
-          }, 4000);
+        ({ context }: { context: DMContext }) => {
+          console.log("Entering ConfirmName with person:", context.appointment.person);
+          const utterance = `Great! Meeting with ${context.appointment.person}.`;
+          console.log("Speaking:", utterance);
+          context.spstRef.send({
+            type: "SPEAK",
+            value: { utterance: utterance }
+          });
         }
       ],
-      on: { SPEAK_COMPLETE: "ConfirmAppointment" }
-    },
-    ConfirmAppointment: {
-      entry: [
-        {
-          type: "spst.speak",
-          params: ({ context }: { context: DMContext }) => {
-            const { person, day, time, wholeDay } = context.appointment;
-            const summary = wholeDay
-              ? `Do you want to confirm the meeting with ${person} on ${day} for the whole day?`
-              : `Do you want to confirm the meeting with ${person} on ${day} at ${time}?`;
-            return { utterance: summary };
-          }
+      on: { 
+        SPEAK_COMPLETE: {
+          target: "AskDay",
+          actions: () => console.log("SPEAK_COMPLETE received, moving to AskDay")
         },
-        () => console.log("Prompting for final confirmation..."),
-        // Add auto-trigger for SPEAK_COMPLETE
-        () => {
-          setTimeout(() => {
-            console.log("Auto-triggering SPEAK_COMPLETE for confirmation question");
-            dmActor.send({ type: "SPEAK_COMPLETE" });
-          }, 4000);
-        }
-      ],
-      on: { SPEAK_COMPLETE: "ListenForConfirmation" }
-    },
-    ListenForConfirmation: {
-      entry: { type: "spst.listen" },
-      on: {
-        RECOGNISED: [
-          {
-            target: "Done",
-            guard: ({ event }) => event.value[0].utterance.toLowerCase().includes("yes"),
-            actions: assign(({ context }) => ({ 
-              appointment: { ...context.appointment, confirmation: true } 
-            }))
-          },
-          {
-            target: "#DM.Greeting.AskName",
-            guard: ({ event }) => event.value[0].utterance.toLowerCase().includes("no"),
-            actions: assign({
-              appointment: {
-                person: null,
-                day: null,
-                time: null,
-                wholeDay: false,
-                confirmation: false
-              },
-              lastResult: null
-            })
-          }
-        ],
-        ASR_NOINPUT: {
-          actions: assign({ lastResult: null }),
-          target: "ConfirmAppointment"
-        }
-      }
-    },
-    Done: {
-      entry: ({ context }) => {
-        if (context.appointment.confirmation) {
-          console.log("Appointment successfully booked!");
-        } else {
-          console.log("Confirmation not received, should not be here!");
+        LISTEN_COMPLETE: {
+          target: "AskDay",
+          actions: () => console.log("LISTEN_COMPLETE received, moving to AskDay")
+        },
+        ASRTTS_READY: {
+          target: "AskDay",
+          actions: () => console.log("ASRTTS_READY received, moving to AskDay")
+        },
+        "*": {
+          actions: ({ event }: { event: DMEvents }) => console.log("Other event in ConfirmName:", event)
         }
       },
+      after: {
+        4000: {
+          target: "AskDay",
+          actions: () => console.log("Timeout - forcing move to AskDay")
+        }
+      }
+    },
+    AskDay: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Which day is the appointment?" },
+      },
+      on: { 
+        SPEAK_COMPLETE: "WaitBeforeListenDay"
+      },
+    },
+    WaitBeforeListenDay: {
+      after: {
+        500: "ListenDay"
+      }
+    },
+    ListenDay: {
+      entry: "spst.listen",
       on: {
-        CLICK: {
-          target: "Greeting",
+        RECOGNISED: {
+          actions: [
+          assign(({ event }) => ({ lastResult: event.value })),
+          ({ event }) => console.log("Recognized:", event.value[0].utterance)
+  ],
+        target: "ProcessDay"
+},
+        ASR_NOINPUT: {
+          target: "NoInputDay",
+          actions: () => console.log("No input detected")
+        },
+        ASR_ERROR: {
+          target: "AskDay",
+          actions: { type: "logError", params: { error: "ASR error" } }
+        }
+      },
+    },
+    ProcessDay: {
+      always: [
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            return !!getDay(utterance);
+          },
+          target: "ConfirmDay",
+          actions: assign(({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            return {
+              appointment: { 
+                ...context.appointment, 
+                day: getDay(utterance) || null
+              }
+            };
+          })
+        },
+        { target: "InvalidDay" }
+      ]
+    },
+    NoInputDay: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "I didn't hear anything. Which day?" },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenDay" },
+    },
+    InvalidDay: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Please say a weekday like Monday or Friday." },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenDay" },
+    },
+    ConfirmDay: {
+      entry: [
+        ({ context }: { context: DMContext }) => {
+          const utterance = `Got it! On ${context.appointment.day}.`;
+          console.log("Speaking:", utterance);
+          context.spstRef.send({
+            type: "SPEAK",
+            value: { utterance: utterance }
+          });
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: "AskWholeDay",
+        
+        "*": {
+          actions: ({ event }: { event: DMEvents }) => console.log("Other event in ConfirmDay:", event)
+        }
+      },
+      after: {
+        3000: "AskWholeDay"
+      }
+    },
+    // NEW WHOLE DAY STATES
+    AskWholeDay: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Is this a whole day meeting?" },
+      },
+      on: { 
+        SPEAK_COMPLETE: "WaitBeforeListenWholeDay"
+      },
+    },
+    WaitBeforeListenWholeDay: {
+      after: {
+        500: "ListenWholeDay"
+      }
+    },
+    ListenWholeDay: {
+      entry: "spst.listen",
+      on: {
+        RECOGNISED: {
+          actions: [
+          assign(({ event }) => ({ lastResult: event.value })),
+          ({ event }) => console.log("Recognized:", event.value[0].utterance)
+  ],
+  target: "ProcessWholeDay"
+},
+        ASR_NOINPUT: {
+          target: "NoInputWholeDay",
+          actions: () => console.log("No input detected for whole day question")
+        },
+        ASR_ERROR: {
+          target: "AskWholeDay",
+          actions: { type: "logError", params: { error: "ASR error" } }
+        }
+      },
+    },
+    ProcessWholeDay: {
+      entry: ({ context }: { context: DMContext }) => {
+        const utterance = context.lastResult?.[0]?.utterance || "";
+        console.log("ProcessWholeDay - utterance:", utterance);
+      },
+      always: [
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            const isYes = isYesResponse(utterance);
+            console.log("Is whole day? ", isYes);
+            return isYes;
+          },
+          target: "ConfirmWholeDay",
+          actions: assign(({ context }: { context: DMContext }) => {
+            return {
+              appointment: { 
+                ...context.appointment, 
+                wholeDay: true,
+                time: null // Clear time for whole day meetings
+              }
+            };
+          })
+        },
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            const isNo = isNoResponse(utterance);
+            console.log("Not whole day? ", isNo);
+            return isNo;
+          },
+          target: "AskTime",
+          actions: assign(({ context }: { context: DMContext }) => {
+            return {
+              appointment: { 
+                ...context.appointment, 
+                wholeDay: false
+              }
+            };
+          })
+        },
+        { 
+          target: "InvalidWholeDay",
+          actions: () => console.log("Unclear whole day response")
+        }
+      ]
+    },
+    NoInputWholeDay: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "I didn't hear anything. Is it a whole day meeting? Say yes or no." },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenWholeDay" },
+    },
+    InvalidWholeDay: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Please say yes if it's a whole day meeting, or no if it's not." },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenWholeDay" },
+    },
+    ConfirmWholeDay: {
+      entry: [
+        ({ context }: { context: DMContext }) => {
+          const utterance = `Okay, it's a whole day meeting.`;
+          console.log("Speaking:", utterance);
+          context.spstRef.send({
+            type: "SPEAK",
+            value: { utterance: utterance }
+          });
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: "Summary",
+        
+        "*": {
+          actions: ({ event }: { event: DMEvents }) => console.log("Other event in ConfirmWholeDay:", event)
+        }
+      },
+      after: {
+        3000: "Summary"
+      }
+      },
+    // END OF NEW WHOLE DAY STATES
+    AskTime: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "What time is the appointment?" },
+      },
+      on: { 
+        SPEAK_COMPLETE: "WaitBeforeListenTime",
+        LISTEN_COMPLETE: "WaitBeforeListenTime",
+        ASRTTS_READY: "WaitBeforeListenTime",
+        "*": {
+          actions: ({ event }: { event: DMEvents }) => console.log("Other event in AskTime:", event)
+        }
+      },
+      after: {
+        3000: {
+          target: "WaitBeforeListenTime",
+          actions: () => console.log("Timeout - forcing move to WaitBeforeListenTime")
+        }
+      }
+    },
+    WaitBeforeListenTime: {
+      after: {
+        500: "ListenTime"
+      }
+    },
+    ListenTime: {
+      entry: "spst.listen",
+      on: {
+        RECOGNISED: {
+          actions: [
+            assign(({ event }: { event: DMEvents }) => ({ lastResult: event.type === 'RECOGNISED' ? event.value : null })),
+            ({ event }: { event: DMEvents }) => {
+              if (event.type === 'RECOGNISED') {
+                console.log("Recognized:", event.value[0].utterance);
+              }
+            }
+          ],
+          target: "ProcessTime"
+        },
+        ASR_NOINPUT: {
+          target: "NoInputTime",
+          actions: () => console.log("No input detected")
+        },
+        ASR_ERROR: {
+          target: "AskTime",
+          actions: { type: "logError", params: { error: "ASR error" } }
+        }
+      },
+    },
+    ProcessTime: {
+      always: [
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            return !!getTime(utterance);
+          },
+          target: "ConfirmTime",
+          actions: assign(({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance || "";
+            return {
+              appointment: { 
+                ...context.appointment, 
+                time: getTime(utterance) || null
+              }
+            };
+          })
+        },
+        { target: "InvalidTime" }
+      ]
+    },
+    NoInputTime: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "I didn't hear anything. What time?" },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenTime" },
+    },
+    InvalidTime: {
+      entry: {
+        type: "spst.speak",
+        params: { utterance: "Please say a time like 'two o'clock' or 'three'." },
+      },
+      on: { SPEAK_COMPLETE: "WaitBeforeListenTime" },
+    },
+    ConfirmTime: {
+      entry: [
+        ({ context }: { context: DMContext }) => {
+          const utterance = `Perfect! At ${context.appointment.time}.`;
+          console.log("Speaking:", utterance);
+          context.spstRef.send({
+            type: "SPEAK",
+            value: { utterance: utterance }
+          });
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: "Summary",
+        
+        "*": {
+          actions: ({ event }: { event: DMEvents }) => console.log("Other event in ConfirmTime:", event)
+        }
+      },
+      after: {
+        3000: "Summary"
+      }
+    },
+    Summary: {
+      entry: [
+        ({ context }: { context: DMContext }) => {
+          let utterance;
+          if (context.appointment.wholeDay) {
+            utterance = `Your whole day appointment is with ${context.appointment.person} on ${context.appointment.day}. Say yes to confirm or no to start over.`;
+          } else {
+            utterance = `Your appointment is with ${context.appointment.person} on ${context.appointment.day} at ${context.appointment.time}. Say yes to confirm or no to start over.`;
+          }
+          console.log("Speaking summary:", utterance);
+          context.spstRef.send({
+            type: "SPEAK",
+            value: { utterance: utterance }
+          });
+        }
+      ],
+      on: { 
+        SPEAK_COMPLETE: "ListenConfirmation",
+        
+      },
+      
+    },
+    
+    ListenConfirmation: {
+      entry: [
+        () => console.log("Entering ListenConfirmation state"),
+        "spst.listen"
+],
+      on: {
+        RECOGNISED: {
+  actions: [
+    assign(({ event }) => ({ lastResult: event.value })),
+    ({ event }) => console.log("Confirmation recognized:", event.value[0].utterance)
+  ],
+  target: "ProcessConfirmation"
+},
+        ASR_NOINPUT: {
+          target: "Summary",
+          actions: () => console.log("No input detected in confirmation")
+        },
+        ASR_ERROR: {
+          target: "Summary",
+          actions: () => console.log("ASR error in confirmation")
+        },
+        "*": {
+          actions: ({ event }) => console.log("Unexpected event in ListenConfirmation:", event)
+        }
+      },
+      after: {
+        10000: {
+          target: "Summary",
+          actions: () => console.log("Timeout in ListenConfirmation")
+        }
+      }
+    },
+    ProcessConfirmation: {
+      entry: () => console.log("Entering ProcessConfirmation"),
+      always: [
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance?.toLowerCase() || "";
+            console.log("Checking for YES - utterance:", utterance);
+            const isYes = ["yes", "sure", "ok", "okay", "yeah", "yep", "confirm"].some(word => 
+              utterance.includes(word)
+            );
+            console.log("Is YES?", isYes);
+            return isYes;
+          },
+          target: "Done"
+        },
+        {
+          guard: ({ context }: { context: DMContext }) => {
+            const utterance = context.lastResult?.[0]?.utterance?.toLowerCase() || "";
+            console.log("Checking for NO - utterance:", utterance);
+            const isNo = ["no", "nope", "cancel", "wrong", "restart"].some(word => 
+              utterance.includes(word)
+            );
+            console.log("Is NO?", isNo);
+            return isNo;
+          },
+          target: "Welcome",
           actions: assign({
-            lastResult: null,
             appointment: {
               person: null,
               day: null,
               time: null,
               wholeDay: false,
-              confirmation: false
-            }
+              confirmation: false,
+            },
+            lastResult: null,
           })
+        },
+        { 
+          target: "Summary",
+          actions: () => console.log("Neither YES nor NO, returning to Summary")
+        }
+      ]
+    },
+    Done: {
+      entry: [
+        ({ context }: { context: DMContext }) => {
+          const utterance = "Great! Your appointment is confirmed. Thank you!";
+          console.log("Speaking done message:", utterance);
+          console.log("Final appointment details:", context.appointment);
+          context.spstRef.send({
+            type: "SPEAK",
+            value: { utterance: utterance }
+          });
+        }
+      ],
+      on: {
+        CLICK: {
+          target: "Welcome",
+          actions: assign({
+            appointment: {
+              person: null,
+              day: null,
+              time: null,
+              wholeDay: false,
+              confirmation: false,
+            },
+            lastResult: null,
+          }),
         }
       }
     }
@@ -556,49 +782,36 @@ const dmActor = createActor(dmMachine, {
   inspect: inspector.inspect,
 }).start();
 
-// Debug the events being sent to the actor
-const originalSend = dmActor.send;
-dmActor.send = function(event: any) {
-  console.log("Event sent to actor:", event);
-  return originalSend.apply(this, [event]);
-};
-
-// Subscribe to state updates
+// Monitor all state transitions
 dmActor.subscribe((state) => {
-  console.group("State update");
-  console.log("State value:", state.value);
-  console.log("State context:", state.context);
+  console.log("=== State Transition ===");
+  console.log("Current state:", state.value);
   
-  // Add more detailed logging for debugging
-  if (state.context.lastResult && state.context.lastResult.length > 0) {
-    console.log("Recognition result:", state.context.lastResult[0].utterance);
+  if (state.context.spstRef) {
+    const spstState = state.context.spstRef.getSnapshot();
+    console.log("Speech State:", spstState.value);
   }
-  
-  if (state.context.appointment) {
-    console.log("Current appointment:", JSON.stringify(state.context.appointment));
-  }
-  
-  console.groupEnd();
 });
 
 export function setupButton(element: HTMLButtonElement) {
   element.addEventListener("click", () => {
     dmActor.send({ type: "CLICK" });
   });
-  dmActor.subscribe((snapshot) => {
-    const meta: { view?: string } = Object.values(
-      snapshot.context.spstRef.getSnapshot().getMeta(),
-    )[0] || {
-      view: undefined,
-    };
-    element.innerHTML = `${meta.view}`;
+
+  dmActor.subscribe((snapshot: any) => {
+    const spstSnapshot = snapshot.context.spstRef.getSnapshot();
+    const meta: { view?: string } = Object.values(spstSnapshot.getMeta?.() || {})[0] || {};
+    element.innerHTML = `${meta?.view || "Click to start"}`;
   });
 }
 
-// Add a debug button to manually trigger SPEAK_COMPLETE
 export function setupDebugButton(element: HTMLButtonElement) {
   element.addEventListener("click", () => {
-    console.log("Debug button clicked - forcing SPEAK_COMPLETE event");
+    const state = dmActor.getSnapshot();
+    console.log("Current State:", state.value);
+    console.log("Appointment:", state.context.appointment);
+    
+    // Force next transition
     dmActor.send({ type: "SPEAK_COMPLETE" });
   });
 }
