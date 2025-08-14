@@ -1,0 +1,375 @@
+{
+    "projectFileVersion": "2025-05-15-preview",
+    "stringIndexType": "Utf16CodeUnit",
+    "metadata": {
+        "projectKind": "Conversation",
+        "settings": {
+            "confidenceThreshold": 0,
+            "normalizeCasing": false,
+            "augmentDiacritics": false
+        },
+        "projectName": "appointment",
+        "multilingual": false,
+        "description": "",
+        "language": "en-us"
+    },
+    "assets": {
+        "projectKind": "Conversation",
+        "intents": [
+            {
+                "category": "None",
+                "description": "Used when the user's input doesn't match any known intent or is out of scope."
+            },
+            {
+                "category": "Book an appointment"
+            },
+            {
+                "category": "Who is X"
+            }
+        ],
+        "entities": [
+            {
+                "category": "Person",
+                "compositionSetting": "combineComponents"
+            },
+            {
+                "category": "Time",
+                "compositionSetting": "combineComponents"
+            },
+            {
+                "category": "Day",
+                "compositionSetting": "combineComponents"
+            }
+        ],
+        "utterances": [
+            {
+                "text": "What do you know about Taylor Swift?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 23,
+                        "length": 12
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Give me some info about Nelson Mandela.",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 24,
+                        "length": 14
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Who is Beyoncé?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 7,
+                        "length": 7
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Can you explain who Frida Kahlo is?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 20,
+                        "length": 11
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Who exactly is Elon Musk?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 15,
+                        "length": 9
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "I'd like to know who Nikola Tesla was.",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 21,
+                        "length": 12
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "What can you tell me about Barack Obama?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 27,
+                        "length": 12
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Do you know who Ada Lovelace is?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 16,
+                        "length": 12
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Tell me about Marie Curie.",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 14,
+                        "length": 11
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Who is Albert Einstein?",
+                "language": "en-us",
+                "intent": "Who is X",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 7,
+                        "length": 15
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Set a meeting with Victoria for Monday at 10",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 19,
+                        "length": 8
+                    },
+                    {
+                        "category": "Day",
+                        "offset": 32,
+                        "length": 6
+                    },
+                    {
+                        "category": "Time",
+                        "offset": 42,
+                        "length": 2
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Can I have an appointment with Vlad at 11 on Tuesday?",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 31,
+                        "length": 4
+                    },
+                    {
+                        "category": "Time",
+                        "offset": 39,
+                        "length": 2
+                    },
+                    {
+                        "category": "Day",
+                        "offset": 45,
+                        "length": 7
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Schedule a meeting with Aya at 10 on Monday.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 24,
+                        "length": 3
+                    },
+                    {
+                        "category": "Time",
+                        "offset": 31,
+                        "length": 2
+                    },
+                    {
+                        "category": "Day",
+                        "offset": 37,
+                        "length": 6
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "I'd like to meet Victoria on Tuesday at 11",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 17,
+                        "length": 8
+                    },
+                    {
+                        "category": "Day",
+                        "offset": 29,
+                        "length": 7
+                    },
+                    {
+                        "category": "Time",
+                        "offset": 40,
+                        "length": 2
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Please arrange an appointment. ",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [],
+                "dataset": "Train"
+            },
+            {
+                "text": "I’d like to schedule a visit.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [],
+                "dataset": "Train"
+            },
+            {
+                "text": "I need to set up an appointment.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [],
+                "dataset": "Train"
+            },
+            {
+                "text": "Can you book a time for me on Monday?",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Day",
+                        "offset": 30,
+                        "length": 6
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Schedule an appointment for me with Vlad.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 36,
+                        "length": 4
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "I'd like to make an appointment with Aya.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Person",
+                        "offset": 37,
+                        "length": 3
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": " Help me book an appointment on Tuesday.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Day",
+                        "offset": 32,
+                        "length": 7
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Book me in for tomorrow.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Day",
+                        "offset": 15,
+                        "length": 8
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "Can I schedule a meeting for next week?",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [
+                    {
+                        "category": "Day",
+                        "offset": 29,
+                        "length": 9
+                    }
+                ],
+                "dataset": "Train"
+            },
+            {
+                "text": "I want to book an appointment.",
+                "language": "en-us",
+                "intent": "Book an appointment",
+                "entities": [],
+                "dataset": "Train"
+            }
+        ]
+    }
+}
