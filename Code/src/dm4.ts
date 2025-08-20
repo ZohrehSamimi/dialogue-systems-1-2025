@@ -1,9 +1,29 @@
 import { assign, createActor, setup } from "xstate";
 import { Settings, speechstate } from "speechstate";
 import { createBrowserInspector } from "@statelyai/inspect";
-import { KEY } from "./azure";
+
 import { DMContext, DMEvents } from "./types";
 
+import {
+  KEY,
+  SPEECH_ENDPOINT,
+  NLU_KEY,
+  NLU_ENDPOINT,
+  NLU_PROJECT,
+  NLU_DEPLOYMENT,
+} from "./azure";
+
+const azureCredentials = {
+  endpoint: SPEECH_ENDPOINT,
+  key: KEY,
+};
+
+const azureLanguageCredentials = {
+  endpoint: NLU_ENDPOINT,
+  key: NLU_KEY,
+  projectName: NLU_PROJECT,
+  deploymentName: NLU_DEPLOYMENT,
+};
 const inspector = createBrowserInspector();
 const knownPeople: { [key: string]: string } = {
   "albert einstein": "Albert Einstein was a theoretical physicist known for the theory of relativity.",
@@ -12,16 +32,9 @@ const knownPeople: { [key: string]: string } = {
 };
 
 
-const azureCredentials = {
-  endpoint:
-    "https://samimi1981.cognitiveservices.azure.com/",
-  key: "1wkAREoXFI31nPfAcFzfxIPKE1jjqaNBJdrX57eYOkSStSbaUUEAJQQJ99BEACi5YpzXJ3w3AAAaACOGwvNz",
-  deploymentName: "appointment",
-  projectName: "appointment",
-};
-
 const settings: Settings = {
-  azureCredentials: azureCredentials,
+  azureCredentials,               // Speech
+  azureLanguageCredentials,       // NLU (global activation)
   azureRegion: "northeurope",
   asrDefaultCompleteTimeout: 0,
   asrDefaultNoInputTimeout: 5000,
@@ -69,10 +82,15 @@ const dmMachine = setup({
         },
       }),
     "spst.listen": ({ context }) =>
-      context.spstRef.send({
-        type: "LISTEN",
-        value: { nlu: true }, 
-      }),
+  context.spstRef.send({
+    type: "LISTEN",
+    value: {
+      nlu: true,            
+      completeTimeout: 0,   
+      noInputTimeout: 5000, 
+    },
+  }),
+
   },
 }).createMachine({
   context: ({ spawn }) => ({
@@ -96,7 +114,8 @@ const dmMachine = setup({
           {
             target: "WhoIsResponse",
             guard: ({ context }) =>
-            context.nluResult?.topIntent === "Who is X",
+            context.nluResult?.prediction?.topIntent === "Who is X",
+
           },
           {
             target: "CheckGrammar",
