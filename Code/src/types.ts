@@ -10,7 +10,7 @@ export interface Appointment {
 export interface DMContext {
   spstRef: AnyActorRef;
   lastResult: Hypothesis[] | null;
-  appointment: Appointment;
+  appointment?: Appointment;   // ← now optional
   nluResult?: any;
 }
 
