@@ -2,6 +2,8 @@
   "dependencies": {
     "@statelyai/inspect": "^0.4.0",
     "@xstate/react": "^5.0.4",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "speechstate": "^2.12.0",
     "xstate": "^5.19.3"
   },

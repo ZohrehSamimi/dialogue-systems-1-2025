@@ -15,6 +15,9 @@
   "packageManager": "yarn@3.6.4+sha256.7f7d51b38db0d94adf25c512e3f3d3b47d23c97922eecc540f7440f116bdb99a",
   "dependencies": {
     "@statelyai/inspect": "^0.4.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "node-fetch": "^3.3.2",
     "speechstate": "2.8.0",
     "xstate": "^5.19.2"
   }
